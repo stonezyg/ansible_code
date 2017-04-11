@@ -1,0 +1,32 @@
+- hosts: all
+  gather_facts: False
+  tasks:
+    - setup:
+        filter: ansible_*
+      tags:
+         - pre_job
+    - debug: msg='{{ ansible_nodename }} {{ansible_bond0.ipv4.address}} {{ansible_bond0.mode}}'
+      tags:
+         - check_status
+    - name: Get network Bond mode 
+      command: "echo '{{ ansible_nodename }} {{ansible_bond0.ipv4.address}} {{ansible_bond0.mode}}'"
+      register: command_output
+      tags:
+         - check_status
+    - name: change bond mode in ifcfg-bond0
+      shell: sed -i.bak`date '+%Y%m%d%H%M'` -e 's/mode=\([0-9]\)/mode=1/g' /etc/sysconfig/network-scripts/ifcfg-bond0
+      tags:
+         - change_mode
+    - name: add BONDING_OPTS in ifcfg-bond0 if not exist
+      shell: grep  'mode='  /etc/sysconfig/network-scripts/ifcfg-bond0 ||echo 'BONDING_OPTS="mode=1 miimon=100"' >> /etc/sysconfig/network-scripts/ifcfg-bond0
+      tags:
+         - change_mode
+    - name: restart network service 
+      service: name=network state=restarted
+      tags:
+         - change_mode
+    - name: save result to local file :/tmp/need_fix.txt
+      local_action: shell echo {{command_output.stdout}} >> /tmp/need_fix.txt
+      when: ansible_bond0.mode  != "active-backup"
+      tags:
+         - check_status
